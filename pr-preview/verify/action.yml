@@ -13,6 +13,9 @@ inputs:
   head-sha:
     description: "Commit the preview should be built from (default: the pull request's head)."
     default: ''
+  muffet-excludes:
+    description: URL regular expressions for the link check to skip, one per line.
+    default: ''
   github-token:
     description: Token that can read and comment on pull requests.
     default: ${{ github.token }}
@@ -56,6 +59,7 @@ runs:
       env:
         PREVIEW_URL: ${{ steps.pr-info.outputs.preview_url }}
         PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
+        MUFFET_EXCLUDES: ${{ inputs.muffet-excludes }}
       run: '"$GITHUB_ACTION_PATH/../scripts/run-verification.sh"'
 
     - name: Comment verification results on PR

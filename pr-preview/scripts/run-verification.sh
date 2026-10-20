@@ -1,7 +1,8 @@
 #!/bin/bash
 # verify action: checks a preview site and writes verification-report.md.
 #
-# Needs PREVIEW_URL and PR_NUMBER. Sets the step outputs
+# Needs PREVIEW_URL and PR_NUMBER, and optionally MUFFET_EXCLUDES (URL
+# regular expressions for muffet to skip, one per line). Sets the step outputs
 # verification_status (success or failed) and report_content.
 # Expects muffet, curl and bc to be installed.
 set -e
@@ -181,6 +182,15 @@ echo "" >> $REPORT_FILE
 echo "## 4. Link and Asset Verification (muffet)" >> $REPORT_FILE
 echo "Running comprehensive muffet validation..." >> $REPORT_FILE
 
+# URL patterns muffet skips, one per line: the calling workflow's
+# muffet-excludes input
+EXCLUDE_ARGS=()
+while IFS= read -r pattern; do
+  if [ -n "$pattern" ]; then
+    EXCLUDE_ARGS+=("--exclude=$pattern")
+  fi
+done <<< "$MUFFET_EXCLUDES"
+
 # Run muffet with proper configuration for thorough checking
 # Identify honestly as a link checker: Cloudflare-fronted sites
 # (e.g. sourceforge.io, linuxgizmos.com) challenge requests that
@@ -196,15 +206,7 @@ if muffet \
   --max-connections-per-host=5 \
   --rate-limit=20 \
   --buffer-size=16384 \
-  --exclude=".*mailto:.*" \
-  --exclude=".*linkedin\.com.*" \
-  --exclude=".*hawaii\.edu.*" \
-  --exclude=".*timeanddate\.com.*" \
-  --exclude=".*reddit\.com.*" \
-  --exclude=".*electronics-lab\.com.*" \
-  --exclude=".*matrix\.to.*" \
-  --exclude=".*tinytapeout\.com/chips/silicon-proven.*" \
-  --exclude=".*siliconprawn\.org.*" \
+  "${EXCLUDE_ARGS[@]}" \
   --header="User-Agent:Mozilla/5.0 (compatible; wafer.space-link-checker; +https://wafer.space/)" \
   --header="Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8" \
   --header="Accept-Language:en-US,en;q=0.9" \
