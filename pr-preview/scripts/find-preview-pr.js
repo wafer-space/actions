@@ -24,7 +24,26 @@
  *   baseurl_path        Jekyll's --baseurl, e.g. /pr-12
  */
 
-const { listPrFiles, executableFiles } = require('./preview-executable-changes.js');
+// Files that run code during the preview build: Jekyll plugins, and the
+// workflows and scripts themselves. Fork PRs changing any are not built.
+const EXECUTABLE_PATTERNS = [
+  /^_plugins\//,
+  /^\.github\//,
+];
+
+async function listPrFiles(github, context, prNumber) {
+  const files = await github.paginate(github.rest.pulls.listFiles, {
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    pull_number: prNumber,
+    per_page: 100
+  });
+  return files.map(f => f.filename);
+}
+
+function executableFiles(filenames) {
+  return filenames.filter(f => EXECUTABLE_PATTERNS.some(p => p.test(f)));
+}
 const generatePrDirectoryName = require('./generate-pr-directory-name.js');
 
 function previewLocation(core, prNumber, prTitle) {

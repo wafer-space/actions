@@ -6,7 +6,7 @@ Actions that build, deploy and check a preview site for each pull request to [wa
 
 ```
 pull_request ─▶ Stage 1: pr-preview-build.yml
-                  check-changes                      no secrets, read-only token
+                  (one no-op step)                   no secrets, no permissions
                        │ finishing triggers
                        ▼
 workflow_run ─▶ Stage 2: pr-preview-deploy.yml (runs from the default branch)
@@ -26,7 +26,6 @@ workflow_run ─▶ Stage 2: pr-preview-deploy.yml (runs from the default branch
 
 | Action | Runs pull request code? | Needs |
 |---|---|---|
-| [`check-changes`](check-changes/action.yml) | no | read token |
 | [`find-pr`](find-pr/action.yml) | no | read token |
 | [`fetch-theme`](fetch-theme/action.yml) | no | theme deploy key |
 | [`build`](build/action.yml) | **yes** | nothing: give its job no secrets and `contents: read` only |
