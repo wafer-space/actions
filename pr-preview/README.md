@@ -1,47 +1,41 @@
 # pr-preview
 
-Actions that build, deploy and check a preview site for each pull request to [wafer-space.github.io](https://github.com/wafer-space/wafer-space.github.io), including pull requests from forks, without letting a pull request's code near a secret.
+Actions that build, deploy and check a preview site for each pull request to [wafer-space.github.io](https://github.com/wafer-space/wafer-space.github.io), including pull requests from forks, without the pull request's code running anywhere near a secret.
 
 ## How the website's workflows use them
 
 ```
-pull_request ─▶ Stage 1: pr-preview-build.yml
-                  (one no-op step)                   no secrets, no permissions
+pull_request ─▶ Stage 1: pr-preview-build.yml        one no-op step, no permissions
                        │ finishing triggers
                        ▼
 workflow_run ─▶ Stage 2: pr-preview-deploy.yml (runs from the default branch)
-                  find-pr ───────┬──▶ fetch-theme   JEKYLL_THEME_KEY, runs no PR code
-                                 │         │ theme artifact
-                                 │         ▼
-                                 ├──▶ build          NO secrets, runs the PR's content
-                                 │         │ site artifact
-                                 │         ▼
-                                 ├──▶ deploy, comment PREVIEW_KEY, runs no PR code
-                                 └──▶ comment (blocked)
+                  find-pr        read-only                  finds the PR, theme commit, URLs
+                  fetch-theme    JEKYLL_THEME_KEY           theme ─▶ artifact
+                  build          NO secrets, contents:read  PR + theme ─▶ site artifact
+                  deploy         PREVIEW_KEY                site artifact ─▶ preview repo, comment
                        │ workflow_dispatch
                        ▼
-                Verification: preview-verification.yml
-                  verify                              read-only, comments the report
+                preview-verification.yml
+                  verify                                    link check, comments the report
 ```
 
-| Action | Runs pull request code? | Needs |
-|---|---|---|
-| [`find-pr`](find-pr/action.yml) | no | read token |
-| [`fetch-theme`](fetch-theme/action.yml) | no | theme deploy key |
-| [`build`](build/action.yml) | **yes** | nothing: give its job no secrets and `contents: read` only |
-| [`deploy`](deploy/action.yml) | no | preview repository deploy key, `deployments: write` |
-| [`comment`](comment/action.yml) | no | `pull-requests: write` |
-| [`update-index`](update-index/action.yml) | no | a checkout of the preview repository |
-| [`verify`](verify/action.yml) | no | `pull-requests: write` |
+`cleanup-previews.yml` uses `update-index` after removing closed PRs' previews.
+
+Only `build` runs the pull request's code (its content, plugins and Gemfile). No other action runs anything from the pull request.
 
 ## Security model
 
-- **Identify the pull request from trusted data only.** `find-pr` uses the `workflow_run` event's head repository, branch and SHA (which GitHub sets, not Stage 1), and checks them against the API. Stage 1 runs the pull request's own copy of its workflow, so nothing it produces is used.
-- **Only `build` runs the pull request's content**, in a job with no secrets. The theme it needs is fetched by `fetch-theme` and handed over as files, so the theme deploy key never reaches it. The pull request's content can read the theme, as it always could through Liquid includes.
-- **The built site is data.** `deploy` copies the artifact into the preview repository and runs nothing from it; it refuses symlinks and removes `.git` directories. Every script and template it uses comes from this repository.
-- **Fork pull requests that change `_plugins/` or `.github/` aren't built at all**, and for other fork pull requests `build` first puts back the default branch's `_plugins/` and `Gemfile`, removes `Gemfile.lock` and `.bundle/`, and stacks a config pinning `plugins_dir`, `source` and `destination`. The build has no secrets, so this is defence in depth: it stops a fork's code running even there.
-- **No gem cache.** Jobs in a `workflow_run` workflow share the default branch's Actions cache scope, so `build` neither restores nor saves one, and the website's production build doesn't use one either: a pull request could otherwise poison it.
-- **Untrusted values go through `env:`**, never `${{ }}` inside a script.
+- **The pull request is identified from trusted data only.** `find-pr` uses the `workflow_run` event's head repository, branch and SHA, which GitHub sets, and checks them against the API. Stage 1 runs the pull request's own copy of its workflow, so nothing it produces is used.
+- **The build has nothing to steal.** Its job gets no secrets and a read-only token. The private theme arrives as files from `fetch-theme`, never the key. The pull request's code can read the theme, as it always could through Liquid includes.
+- **The built site is data.** `deploy` copies the artifact into the preview repository and runs nothing from it; it refuses symlinks and removes `.git` directories.
+- **No Actions caches.** Jobs in a `workflow_run` workflow share the default branch's cache scope, so `build` could write a poisoned cache for anything on the default branch that restores one. Nothing does: `build` uses no cache, and the website's production build doesn't either. **Don't add caching to the website's workflows.**
+- **Untrusted values go through `env:`**, never `${{ }}` inside a script, and every action used here is pinned to a commit SHA.
+
+Previews are served from one domain, so a pull request's HTML and JavaScript share an origin with the other previews. Don't treat the preview site as trusted.
+
+## muffet
+
+`verify` installs the [muffet](https://github.com/raviqqe/muffet) link checker from [`scripts/install-verification-tools.sh`](scripts/install-verification-tools.sh). The calling workflow passes its list of URLs to skip as `muffet-excludes`.
 
 ## Changing these actions
 
