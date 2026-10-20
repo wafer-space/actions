@@ -45,14 +45,26 @@ cd preview-repo
 git config user.name 'github-actions[bot]'
 git config user.email 'github-actions[bot]@users.noreply.github.com'
 
-rm -rf "$DIR_NAME"
-cp -r "$SITE_DIR" "$DIR_NAME"
-"$SCRIPT_DIR/generate-preview-index.sh"
+# Other PRs' previews may be pushed at the same time, so if the push is
+# rejected, start again from the new main
+for attempt in 1 2 3 4 5; do
+  git fetch -q origin main
+  git reset -q --hard origin/main
+  rm -rf "$DIR_NAME"
+  cp -r "$SITE_DIR" "$DIR_NAME"
+  "$SCRIPT_DIR/generate-preview-index.sh"
 
-git add -A
-if git diff --staged --quiet; then
-  echo "No changes to commit"
-  exit 0
-fi
-git commit -m "Deploy preview for PR #${PR_NUMBER} - ${PR_SHA}"
-git push origin main
+  git add -A
+  if git diff --staged --quiet; then
+    echo "No changes to commit"
+    exit 0
+  fi
+  git commit -q -m "Deploy preview for PR #${PR_NUMBER} - ${PR_SHA}"
+  if git push origin main; then
+    exit 0
+  fi
+  echo "Push rejected (attempt $attempt), retrying"
+  sleep $((attempt * 5))
+done
+echo "Couldn't push after 5 attempts" >&2
+exit 1
