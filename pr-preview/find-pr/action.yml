@@ -1,0 +1,73 @@
+name: PR preview / find pull request
+description: >-
+  Stage 2 (workflow_run). Finds the pull request the triggering Stage 1 run
+  was for, using only the event and the GitHub API, decides whether it may
+  be built, and works out everything the later jobs need. Runs no code from
+  the pull request.
+
+inputs:
+  preview-repository:
+    description: Repository previews are pushed to, e.g. wafer-space/preview.wafer.space.
+    required: true
+  preview-base-url:
+    description: URL previews are served under, e.g. https://preview.wafer.space.
+    required: true
+  github-token:
+    description: Token that can read pull requests.
+    default: ${{ github.token }}
+
+outputs:
+  found:
+    description: "'true' if there is an open pull request to deploy."
+    value: ${{ steps.find.outputs.found }}
+  number:
+    value: ${{ steps.find.outputs.number }}
+  sha:
+    description: The pull request's head commit, which Stage 1 ran on.
+    value: ${{ steps.find.outputs.sha }}
+  title:
+    value: ${{ steps.find.outputs.title }}
+  is-fork:
+    value: ${{ steps.find.outputs.is_fork }}
+  deployment-allowed:
+    description: "'false' for fork PRs that change executable code."
+    value: ${{ steps.find.outputs.deployment_allowed }}
+  dangerous-files:
+    description: The executable files a blocked fork PR changes, one per line.
+    value: ${{ steps.find.outputs.dangerous_files }}
+  gemfile-modified:
+    value: ${{ steps.find.outputs.gemfile_modified }}
+  theme-sha:
+    description: The theme commit the pull request's _theme submodule points at.
+    value: ${{ steps.find.outputs.theme_sha }}
+  directory-name:
+    description: e.g. pr-12
+    value: ${{ steps.find.outputs.directory_name }}
+  slugified-name:
+    description: e.g. pr-12-fix-the-faq, which redirects to directory-name.
+    value: ${{ steps.find.outputs.slugified_name }}
+  base-url:
+    description: preview-base-url without a trailing slash.
+    value: ${{ steps.find.outputs.base_url }}
+  base-path:
+    description: "'' or the path of preview-base-url, e.g. /preview.wafer.space."
+    value: ${{ steps.find.outputs.base_path }}
+  baseurl-path:
+    description: Jekyll's --baseurl for the preview, e.g. /pr-12.
+    value: ${{ steps.find.outputs.baseurl_path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Find pull request and check it is safe to build
+      id: find
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
+      env:
+        SCRIPTS: ${{ github.action_path }}/../scripts
+        PREVIEW_REPOSITORY: ${{ inputs.preview-repository }}
+        PREVIEW_BASE_URL: ${{ inputs.preview-base-url }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const findPreviewPr = require(`${process.env.SCRIPTS}/find-preview-pr.js`);
+          await findPreviewPr(github, context, core);

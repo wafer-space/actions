@@ -1,0 +1,90 @@
+name: PR preview / deploy
+description: >-
+  Stage 2 (workflow_run). Downloads the build action's site artifact,
+  pushes it to the preview repository, waits for GitHub Pages to serve it
+  and records a GitHub deployment. The artifact is only copied as data;
+  every script and template comes from this repository, and no code from
+  the pull request is run.
+
+inputs:
+  preview-repository:
+    description: Repository previews are pushed to.
+    required: true
+  preview-key:
+    description: Deploy key with write access to preview-repository.
+    required: true
+  base-url:
+    description: find-pr's base-url.
+    required: true
+  base-path:
+    description: find-pr's base-path.
+    default: ''
+  directory-name:
+    description: find-pr's directory-name.
+    required: true
+  slugified-name:
+    description: find-pr's slugified-name.
+    required: true
+  pr-number:
+    required: true
+  pr-sha:
+    required: true
+  site-artifact:
+    description: Name of the build action's artifact.
+    default: preview-site
+  github-token:
+    description: Token that can create deployments.
+    default: ${{ github.token }}
+
+outputs:
+  deployment-status:
+    description: success, partial (served, but the content check timed out) or failed.
+    value: ${{ steps.wait.outputs.deployment_status }}
+  preview-url:
+    value: ${{ steps.wait.outputs.preview_url }}
+  error-message:
+    value: ${{ steps.wait.outputs.error_message }}
+
+runs:
+  using: composite
+  steps:
+    - name: Download site
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+      with:
+        name: ${{ inputs.site-artifact }}
+        path: ${{ runner.temp }}/preview-site
+
+    - name: Push to preview repository
+      shell: bash
+      env:
+        SITE_DIR: ${{ runner.temp }}/preview-site
+        DIR_NAME: ${{ inputs.directory-name }}
+        SLUG_NAME: ${{ inputs.slugified-name }}
+        BASE_PATH: ${{ inputs.base-path }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_SHA: ${{ inputs.pr-sha }}
+        PREVIEW_REPOSITORY: ${{ inputs.preview-repository }}
+        PREVIEW_BASE_URL: ${{ inputs.base-url }}
+        PREVIEW_KEY: ${{ inputs.preview-key }}
+      run: '"$GITHUB_ACTION_PATH/../scripts/deploy-preview.sh"'
+
+    - name: Wait for GitHub Pages
+      id: wait
+      shell: bash
+      env:
+        PREVIEW_URL: ${{ inputs.base-url }}/${{ inputs.directory-name }}/
+      run: '"$GITHUB_ACTION_PATH/../scripts/wait-for-preview.sh"'
+
+    - name: Record GitHub deployment
+      if: steps.wait.outputs.deployment_status == 'success'
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
+      env:
+        SCRIPTS: ${{ github.action_path }}/../scripts
+        PR_NUMBER: ${{ inputs.pr-number }}
+        HEAD_SHA: ${{ inputs.pr-sha }}
+        PREVIEW_URL: ${{ steps.wait.outputs.preview_url }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const createPreviewDeployment = require(`${process.env.SCRIPTS}/create-preview-deployment.js`);
+          await createPreviewDeployment(github, context);
