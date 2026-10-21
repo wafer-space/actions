@@ -8,7 +8,8 @@
 
 module.exports = async function getVerificationPrInfo(github, context, core) {
   const prNumber = process.env.INPUT_PR_NUMBER;
-  const previewUrl = process.env.INPUT_PREVIEW_URL;
+  // The checks append paths to it, so it must end in exactly one slash
+  const previewUrl = `${process.env.INPUT_PREVIEW_URL.replace(/\/+$/, '')}/`;
   if (!/^[0-9]{1,5}$/.test(prNumber)) {
     core.setFailed(`Invalid PR number: ${prNumber}`);
     return;
