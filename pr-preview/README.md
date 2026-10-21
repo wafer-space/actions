@@ -47,7 +47,9 @@ Previews are served from one domain, so a pull request's HTML and JavaScript sha
 
 ## muffet
 
-`verify` installs the [muffet](https://github.com/raviqqe/muffet) link checker from [`scripts/install-verification-tools.sh`](scripts/install-verification-tools.sh) and runs it with [`scripts/run-muffet.sh`](scripts/run-muffet.sh). The calling workflow passes its list of URLs to skip as `muffet-excludes`.
+`verify` installs the [muffet](https://github.com/raviqqe/muffet) link checker at the version and SHA256 checksum pinned in [`scripts/install-verification-tools.sh`](scripts/install-verification-tools.sh), and runs it with [`scripts/run-muffet.sh`](scripts/run-muffet.sh). The calling workflow passes its list of URLs to skip as `muffet-excludes`.
+
+[`.github/workflows/update-muffet.yml`](../.github/workflows/update-muffet.yml) checks weekly for a newer release, and once it's a week old opens (or updates) a pull request updating both. It first checks the release against muffet's published checksums, but never runs it: CI does, on the pull request, by running muffet on the test site. The pull request is opened with a token for the wafer-space-automation GitHub App, so CI runs on it.
 
 ## Copies of the website
 
