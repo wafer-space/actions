@@ -1,15 +1,17 @@
 # Update muffet
 # pr-preview/scripts/install-verification-tools.sh installs muffet at a
 # pinned version with a SHA256 checksum. This workflow checks weekly for a
-# newer muffet release and opens a pull request that updates both.
+# muffet release that is newer and at least a week old, and opens (or
+# updates) a pull request that updates both.
 #
-# update-muffet.py verifies the new release against muffet's published
-# checksums and checks that it still accepts every option
-# run-verification.sh passes to it before changing anything.
+# update-muffet.py verifies the release against muffet's published
+# checksums. It doesn't run the new binary: CI does, on the pull request.
 #
 # The branch and pull request are created with a GitHub App token rather
 # than GITHUB_TOKEN, because GitHub doesn't start workflows for events
-# GITHUB_TOKEN causes, so the pull request would get no checks. It needs:
+# GITHUB_TOKEN causes, so the pull request would get no CI. The token is
+# only created once there's an update, and never stored in .git/config.
+# It needs:
 # - variable AUTOMATION_APP_CLIENT_ID: the App's client ID
 # - secret AUTOMATION_APP_PRIVATE_KEY: a private key for the App
 # The App needs Contents and Pull requests (read and write) permissions,
@@ -35,8 +37,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Check for a newer muffet release
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/update-muffet.py pr-preview/scripts/install-verification-tools.sh
+
       - name: Create GitHub App token
         id: app-token
+        if: steps.update.outputs.updated == 'true'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
           client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
@@ -44,19 +58,7 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Checkout repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
-        with:
-          # Kept in .git/config so the git push below uses the App token
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Check for a newer muffet release
-        id: update
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 .github/scripts/update-muffet.py pr-preview/scripts/install-verification-tools.sh pr-preview/scripts/run-verification.sh
-
-      - name: Open pull request
+      - name: Open or update pull request
         if: steps.update.outputs.updated == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -65,12 +67,9 @@ jobs:
           PREVIOUS_VERSION: ${{ steps.update.outputs.previous_version }}
           RELEASE_URL: ${{ steps.update.outputs.release_url }}
         run: |
-          BRANCH="automation/update-muffet-${VERSION}"
-
-          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
-            echo "Branch $BRANCH already exists, so a pull request for $VERSION is already open or was closed"
-            exit 0
-          fi
+          # One branch, so a newer release replaces an unmerged update
+          # instead of opening a second pull request
+          BRANCH="automation/update-muffet"
 
           # Commit as the App's bot user, so the commits link to it
           BOT_USER="${APP_SLUG}[bot]"
@@ -79,24 +78,24 @@ jobs:
           git config user.email "${BOT_ID}+${BOT_USER}@users.noreply.github.com"
           git switch -c "$BRANCH"
           git commit -am "CI: update muffet from ${PREVIOUS_VERSION} to ${VERSION}"
-          git push origin "$BRANCH"
+          # git uses GH_TOKEN through gh's credential helper
+          gh auth setup-git
+          git push --force origin "$BRANCH"
 
           cat > pr-body.md << EOF
           Updates the muffet link checker used by the \`pr-preview/verify\` action from ${PREVIOUS_VERSION} to ${VERSION}.
 
           Release notes: ${RELEASE_URL}
 
-          Checked by \`update-muffet.py\` before opening this pull request:
-          - \`muffet_linux_amd64.tar.gz\` matches the SHA256 in the release's published checksums file
-          - the new binary's \`--help\` still lists every option \`run-verification.sh\` passes to muffet
-
-          Nothing here runs the link check, so the new version is first exercised when a repository using \`pr-preview/verify\` is moved to a commit that includes it, e.g. wafer-space.github.io's \`preview-verification.yml\`.
+          \`update-muffet.py\` checked that \`muffet_linux_amd64.tar.gz\` matches the SHA256 in the release's published checksums file. CI's muffet job runs the new version on the test site.
 
           Opened automatically by \`.github/workflows/update-muffet.yml\`.
           EOF
 
-          gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "CI: update muffet to ${VERSION}" \
-            --body-file pr-body.md
+          TITLE="CI: update muffet to ${VERSION}"
+          PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$PR" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$PR" -f title="$TITLE" -F body=@pr-body.md
+          else
+            gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file pr-body.md
+          fi
