@@ -14,6 +14,10 @@ A workflow that runs with secrets then runs exactly the code that was reviewed h
 
 Builds a preview site for every pull request to [wafer-space.github.io](https://github.com/wafer-space/wafer-space.github.io), including pull requests from forks, and checks it. See [pr-preview/README.md](pr-preview/README.md).
 
+## Tests
+
+[CI](.github/workflows/ci.yml) runs shellcheck and syntax checks on the scripts, and [`tests/test-muffet.sh`](tests/test-muffet.sh), which runs muffet the way `verify` does on a small test site and checks it reports exactly the broken links in [`tests/expected-failures.txt`](tests/expected-failures.txt). Run that locally with muffet installed.
+
 ## License
 
 [Apache License 2.0](LICENSE)

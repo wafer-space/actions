@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>muffet test site</title>
+</head>
+<body>
+  <!-- Fine -->
+  <a href="good.html">A page that exists</a>
+  <a href="good.html#here">An anchor that exists</a>
+  <img src="pixel.png" alt="An image that exists">
+
+  <!-- Broken: listed in expected-failures.txt -->
+  <a href="missing.html">A page that doesn't exist</a>
+  <a href="good.html#nowhere">An anchor that doesn't exist</a>
+
+  <!-- Broken, but skipped with MUFFET_EXCLUDES -->
+  <a href="excluded.html">An excluded page</a>
+</body>
+</html>
