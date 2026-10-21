@@ -1,0 +1,34 @@
+name: PR preview / clean up
+description: >-
+  Removes the previews of closed pull requests from the preview repository
+  and regenerates its index. Runs no code from any pull request.
+
+inputs:
+  preview-repository:
+    description: Repository previews are pushed to.
+    required: true
+  preview-key:
+    description: Deploy key that can push to preview-repository.
+    required: true
+  preview-base-url:
+    description: URL previews are served under, e.g. https://preview.wafer.space.
+    required: true
+  pr-number:
+    description: "Only clean up this pull request's preview (default: every closed one)."
+    default: ''
+  github-token:
+    description: Token that can read pull requests.
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Remove closed pull requests' previews
+      shell: bash
+      env:
+        PREVIEW_REPOSITORY: ${{ inputs.preview-repository }}
+        PREVIEW_KEY: ${{ inputs.preview-key }}
+        PREVIEW_BASE_URL: ${{ inputs.preview-base-url }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: '"$GITHUB_ACTION_PATH/../scripts/cleanup-previews.sh"'

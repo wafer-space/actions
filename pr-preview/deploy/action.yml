@@ -1,0 +1,98 @@
+name: PR preview / deploy
+description: >-
+  Stage 2 (workflow_run). Downloads the build action's site artifact,
+  pushes it to the preview repository, waits for GitHub Pages to serve it
+  and reports on the pull request, as a comment and a "PR preview" commit
+  status. If the build failed, only reports that. The artifact is only
+  copied as data, and no code from the pull request is run. Skips
+  everything if the pull request has moved on to a newer commit. Fails if
+  the build failed or the preview isn't served in time.
+
+inputs:
+  build-result:
+    description: "The build job's result (needs.<job>.result): only 'success' is deployed."
+    required: true
+  preview-repository:
+    description: Repository previews are pushed to.
+    required: true
+  preview-key:
+    description: Deploy key that can push to preview-repository.
+    required: true
+  preview-base-url:
+    description: URL previews are served under, for the index page.
+    required: true
+  directory-name:
+    description: find-pr's directory-name.
+    required: true
+  preview-url:
+    description: find-pr's preview-url.
+    required: true
+  pr-number:
+    required: true
+  pr-sha:
+    required: true
+  site-artifact:
+    description: Name of the build action's artifact.
+    default: preview-site
+  github-token:
+    description: Token that can read and comment on pull requests and set commit statuses.
+    default: ${{ github.token }}
+
+outputs:
+  deployed:
+    description: "'true' if the preview is being served."
+    value: ${{ steps.wait.outputs.deployed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Download site
+      if: inputs.build-result == 'success'
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+      with:
+        name: ${{ inputs.site-artifact }}
+        path: ${{ runner.temp }}/preview-site
+
+    - name: Push to preview repository
+      id: push
+      if: inputs.build-result == 'success'
+      shell: bash
+      env:
+        SITE_DIR: ${{ runner.temp }}/preview-site
+        DIR_NAME: ${{ inputs.directory-name }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_SHA: ${{ inputs.pr-sha }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        PREVIEW_REPOSITORY: ${{ inputs.preview-repository }}
+        PREVIEW_BASE_URL: ${{ inputs.preview-base-url }}
+        PREVIEW_KEY: ${{ inputs.preview-key }}
+      run: '"$GITHUB_ACTION_PATH/../scripts/deploy-preview.sh"'
+
+    - name: Wait for GitHub Pages
+      id: wait
+      if: inputs.build-result == 'success' && steps.push.outputs.superseded != 'true'
+      shell: bash
+      env:
+        PREVIEW_URL: ${{ inputs.preview-url }}
+        EXPECTED_COMMIT: ${{ inputs.pr-sha }}
+      run: '"$GITHUB_ACTION_PATH/../scripts/wait-for-preview.sh"'
+
+    - name: Report on pull request
+      if: ${{ !cancelled() && steps.push.outputs.superseded != 'true' }}
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
+      env:
+        SCRIPTS: ${{ github.action_path }}/../scripts
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PREVIEW_URL: ${{ inputs.preview-url }}
+        HEAD_SHA: ${{ inputs.pr-sha }}
+        RESULT: ${{ inputs.build-result != 'success' && 'build-failed' || (steps.wait.outputs.deployed == 'true' && 'deployed' || 'not-served') }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const commentPreviewStatus = require(`${process.env.SCRIPTS}/comment-preview-status.js`);
+          await commentPreviewStatus(github, context);
+
+    - name: Fail if the preview wasn't deployed
+      if: steps.push.outputs.superseded != 'true' && steps.wait.outputs.deployed != 'true'
+      shell: bash
+      run: exit 1

@@ -1,0 +1,88 @@
+name: PR preview / verify
+description: >-
+  Checks a deployed preview (content, assets, links with muffet, load
+  time, viewport), posts the report on the pull request and sets the
+  "PR preview / link check" commit status. Fails if any check fails.
+
+inputs:
+  pr-number:
+    required: true
+  preview-url:
+    description: The preview to check, e.g. https://preview.wafer.space/pr-12/.
+    required: true
+  head-sha:
+    description: "Commit the preview should be built from (default: the pull request's head)."
+    default: ''
+  muffet-excludes:
+    description: URL regular expressions for the link check to skip, one per line.
+    default: ''
+  github-token:
+    description: Token that can read and comment on pull requests and set commit statuses.
+    default: ${{ github.token }}
+
+outputs:
+  verification-status:
+    description: success or failed.
+    value: ${{ steps.verification.outputs.verification_status }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get PR information
+      id: pr-info
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
+      env:
+        SCRIPTS: ${{ github.action_path }}/../scripts
+        INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+        INPUT_PREVIEW_URL: ${{ inputs.preview-url }}
+        INPUT_HEAD_SHA: ${{ inputs.head-sha }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const getVerificationPrInfo = require(`${process.env.SCRIPTS}/get-verification-pr-info.js`);
+          await getVerificationPrInfo(github, context, core);
+
+    - name: Wait for the preview of the commit
+      id: wait
+      shell: bash
+      env:
+        PREVIEW_URL: ${{ steps.pr-info.outputs.preview_url }}
+        EXPECTED_COMMIT: ${{ steps.pr-info.outputs.head_sha }}
+      run: '"$GITHUB_ACTION_PATH/../scripts/wait-for-preview.sh"'
+
+    - name: Install verification tools
+      if: steps.wait.outputs.deployed == 'true'
+      shell: bash
+      run: '"$GITHUB_ACTION_PATH/../scripts/install-verification-tools.sh"'
+
+    - name: Perform comprehensive site verification
+      id: verification
+      if: steps.wait.outputs.deployed == 'true'
+      shell: bash
+      env:
+        PREVIEW_URL: ${{ steps.pr-info.outputs.preview_url }}
+        PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
+        MUFFET_EXCLUDES: ${{ inputs.muffet-excludes }}
+      run: '"$GITHUB_ACTION_PATH/../scripts/run-verification.sh"'
+
+    - name: Comment verification results on PR
+      if: ${{ !cancelled() && steps.pr-info.outputs.pr_number != '' }}
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
+      env:
+        SCRIPTS: ${{ github.action_path }}/../scripts
+        PR_NUMBER: ${{ steps.pr-info.outputs.pr_number }}
+        HEAD_SHA: ${{ steps.pr-info.outputs.head_sha }}
+        VERIFICATION_STATUS: ${{ steps.verification.outputs.verification_status || 'failed' }}
+        REPORT_CONTENT: ${{ steps.verification.outputs.report_content || format('The preview at {0} wasn''t serving commit {1} in time, or the checks didn''t finish. See the workflow run.', steps.pr-info.outputs.preview_url, steps.pr-info.outputs.head_sha) }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const commentVerificationResults = require(`${process.env.SCRIPTS}/comment-verification-results.js`);
+          await commentVerificationResults(github, context, core);
+
+    - name: Fail if verification failed
+      if: steps.verification.outputs.verification_status != 'success'
+      shell: bash
+      run: |
+        echo "Preview site verification failed; see the report in the PR comment."
+        exit 1

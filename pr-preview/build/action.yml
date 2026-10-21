@@ -1,0 +1,72 @@
+name: PR preview / build
+description: >-
+  Stage 2 (workflow_run). Builds the pull request's site with the theme
+  from fetch-theme and uploads it as an artifact for the deploy action.
+  This is the only action that runs the pull request's code (its content,
+  plugins and Gemfile), so the job using it must get no secrets and only
+  read permissions.
+
+inputs:
+  pr-sha:
+    description: The pull request's head commit (find-pr's sha).
+    required: true
+  baseurl:
+    description: Jekyll's --baseurl (find-pr's baseurl).
+    required: true
+  theme-artifact:
+    description: Name of fetch-theme's artifact.
+    default: preview-theme
+  site-artifact:
+    description: Name of the artifact to upload the built site as.
+    default: preview-site
+  ruby-version:
+    default: '3.1'
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout pull request
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      with:
+        ref: ${{ inputs.pr-sha }}
+        path: pr
+        submodules: false  # the theme comes from fetch-theme
+        # Don't leave the token in .git/config, where the build could read it
+        persist-credentials: false
+        # actions/checkout refuses fork code in workflow_run unless told
+        # otherwise. Building it is this action's purpose: the job has no
+        # secrets
+        allow-unsafe-pr-checkout: true
+
+    - name: Add theme
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+      with:
+        name: ${{ inputs.theme-artifact }}
+        path: pr/_theme
+
+    - name: Setup Ruby
+      uses: ruby/setup-ruby@4a9ddd6f338a97768b8006bf671dfbad383215f4  # v1.207.0
+      with:
+        ruby-version: ${{ inputs.ruby-version }}
+        working-directory: pr
+        # No gem cache: this runs pull request code in the default branch's
+        # cache scope, so it must neither restore nor save one
+        bundler-cache: false
+
+    - name: Build site
+      shell: bash
+      working-directory: pr
+      env:
+        BASEURL: ${{ inputs.baseurl }}
+        JEKYLL_ENV: production
+      run: |
+        bundle install
+        bundle exec jekyll build --baseurl "$BASEURL" --future
+
+    - name: Upload site
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      with:
+        name: ${{ inputs.site-artifact }}
+        path: pr/_site
+        if-no-files-found: error
+        retention-days: 1

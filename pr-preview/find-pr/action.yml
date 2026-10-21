@@ -1,0 +1,50 @@
+name: PR preview / find pull request
+description: >-
+  Stage 2 (workflow_run). Finds the pull request the triggering Stage 1 run
+  was for, using only the event and the GitHub API, and works out what the
+  later jobs need. Runs no code from the pull request.
+
+inputs:
+  preview-base-url:
+    description: URL previews are served under, e.g. https://preview.wafer.space.
+    required: true
+  github-token:
+    description: Token that can read pull requests and contents.
+    default: ${{ github.token }}
+
+outputs:
+  found:
+    description: "'true' if there is an open pull request to deploy."
+    value: ${{ steps.find.outputs.found }}
+  number:
+    value: ${{ steps.find.outputs.number }}
+  sha:
+    description: The pull request's head commit, which Stage 1 ran on.
+    value: ${{ steps.find.outputs.sha }}
+  theme-sha:
+    description: The theme commit the pull request's _theme submodule points at.
+    value: ${{ steps.find.outputs.theme_sha }}
+  directory-name:
+    description: e.g. pr-12
+    value: ${{ steps.find.outputs.directory_name }}
+  preview-url:
+    description: e.g. https://preview.wafer.space/pr-12/
+    value: ${{ steps.find.outputs.preview_url }}
+  baseurl:
+    description: Jekyll's --baseurl for the preview, e.g. /pr-12.
+    value: ${{ steps.find.outputs.baseurl }}
+
+runs:
+  using: composite
+  steps:
+    - name: Find pull request
+      id: find
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
+      env:
+        SCRIPTS: ${{ github.action_path }}/../scripts
+        PREVIEW_BASE_URL: ${{ inputs.preview-base-url }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const findPreviewPr = require(`${process.env.SCRIPTS}/find-preview-pr.js`);
+          await findPreviewPr(github, context, core);
