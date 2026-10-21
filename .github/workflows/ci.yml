@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: shellcheck
+        run: shellcheck -S warning -P SCRIPTDIR -x pr-preview/scripts/*.sh tests/*.sh
+
+      - name: JavaScript syntax
+        run: for f in pr-preview/scripts/*.js; do node --check "$f"; done
+
+      - name: Python syntax
+        run: python3 -m py_compile pr-preview/scripts/*.py
+
+  muffet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install verification tools
+        run: pr-preview/scripts/install-verification-tools.sh
+
+      - name: Check muffet on the test site
+        run: tests/test-muffet.sh
