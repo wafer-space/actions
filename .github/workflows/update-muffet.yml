@@ -1,0 +1,81 @@
+# Update muffet
+# pr-preview/scripts/install-verification-tools.sh installs muffet at a
+# pinned version with a SHA256 checksum. This workflow checks weekly for a
+# muffet release that is newer and at least a week old, and opens (or
+# updates) a pull request that updates both.
+#
+# update-muffet.py verifies the release against muffet's published
+# checksums. It doesn't run the new binary: CI does, on the pull request.
+# open-update-pr.py opens or updates the pull request, leaving alone a
+# branch someone else has pushed to, and doesn't reopen a release whose
+# pull request was closed without merging.
+#
+# The branch and pull request are created with a GitHub App token rather
+# than GITHUB_TOKEN, because GitHub doesn't start workflows for events
+# GITHUB_TOKEN causes, so the pull request would get no CI. The token is
+# only created once there's an update, and never stored in .git/config.
+# It needs:
+# - variable AUTOMATION_APP_CLIENT_ID: the App's client ID
+# - secret AUTOMATION_APP_PRIVATE_KEY: a private key for the App
+# The App needs Contents and Pull requests (read and write) permissions,
+# and to be installed on this repository.
+#
+# GitHub disables scheduled workflows in public repositories after 60 days
+# without activity, and a broken App key only shows once there's an update,
+# so run it by hand now and then to check it still works.
+
+name: Update muffet
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'  # Mondays 06:17 UTC
+  workflow_dispatch:
+
+# GITHUB_TOKEN only reads; writes use the App token
+permissions:
+  contents: read
+
+concurrency:
+  group: update-muffet
+  cancel-in-progress: false
+
+jobs:
+  update-muffet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # The default branch even when run by hand from another one, as the
+      # pull request targets it
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Check for a newer muffet release
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/update-muffet.py pr-preview/scripts/install-verification-tools.sh
+
+      - name: Create GitHub App token
+        id: app-token
+        if: steps.update.outputs.updated == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open or update pull request
+        if: steps.update.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          VERSION: ${{ steps.update.outputs.version }}
+          PREVIOUS_VERSION: ${{ steps.update.outputs.previous_version }}
+          RELEASE_URL: ${{ steps.update.outputs.release_url }}
+          BASE: ${{ github.event.repository.default_branch }}
+        run: python3 .github/scripts/open-update-pr.py
