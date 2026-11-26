@@ -1,0 +1,5 @@
+@URL@
+	404	@URL@missing.html
+	id #nowhere not found	@URL@good.html#nowhere
+@URL@good.html
+	404	@URL@missing-too.html

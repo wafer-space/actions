@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+
+      # Every script in the repository, wherever it is
+      - name: shellcheck
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck -S warning -P SCRIPTDIR -x
+
+      - name: JavaScript syntax
+        run: git ls-files -z '*.js' | xargs -0 -n1 node --check
+
+      - name: Python syntax
+        run: git ls-files -z '*.py' | xargs -0 python3 -m py_compile
+
+  muffet:
+    runs-on: ubuntu-latest
+    # muffet's --timeout is per request; a hung run shouldn't take hours
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install verification tools
+        run: pr-preview/scripts/install-verification-tools.sh
+
+      - name: Check muffet on the test site
+        run: tests/test-muffet.sh
