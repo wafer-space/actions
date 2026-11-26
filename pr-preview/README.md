@@ -59,6 +59,8 @@ Previews are served from one domain, so a pull request's HTML and JavaScript sha
 
 [`.github/workflows/update-muffet.yml`](../.github/workflows/update-muffet.yml) checks weekly for a newer release, and once it's a week old opens (or updates) a pull request updating both. It first checks the release against muffet's published checksums, but never runs it: CI does, on the pull request, by running muffet on the test site. The pull request is opened with a token for the wafer-space-automation GitHub App, so CI runs on it.
 
+Updates go on one branch, `automation/update-muffet`, which is only rewritten when the update changes, and never once someone else has pushed to it (say, to fix `tests/expected-failures.txt` for the new version). To decline a release, close its pull request without merging: it isn't opened again, and the next release gets a new one.
+
 ## Copies of the website
 
 A copy of the website in someone's own account (a fork of wafer-space.github.io) runs these workflows too. There they use the owner's own fork of the theme and deploy to the owner's own copy of the preview repository, and only if configured: the website's workflows describe how. A copy of the preview repository mustn't keep the original's `CNAME`, so `deploy` and `cleanup` remove a `CNAME` that doesn't match the preview base URL's host. Previews are pushed to the preview repository's `main` branch, which Pages must serve.
