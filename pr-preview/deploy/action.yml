@@ -45,7 +45,10 @@ inputs:
       after.
     default: ''
   github-token:
-    description: Token that can read and comment on pull requests and set commit statuses.
+    description: >-
+      Token that can read and comment on pull requests and set commit
+      statuses. It must comment as github-actions[bot], which is how this
+      finds its own comments, so use GITHUB_TOKEN.
     default: ${{ github.token }}
 
 outputs:

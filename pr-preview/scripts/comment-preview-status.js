@@ -43,9 +43,9 @@ module.exports = async function commentPreviewStatus(github, context) {
     },
     'push-failed': {
       state: 'failure',
-      description: "Preview couldn't be pushed",
+      description: "Preview couldn't be deployed",
       targetUrl: runUrl,
-      body: `## ❌ Preview deployment failed\n\nCommit \`${commit}\` built, but couldn't be pushed to the preview site. See the [workflow run](${runUrl}).`
+      body: `## ❌ Preview deployment failed\n\nCommit \`${commit}\` built, but couldn't be deployed to the preview site. See the [workflow run](${runUrl}).`
     }
   };
   const result = results[process.env.RESULT];
@@ -60,14 +60,6 @@ module.exports = async function commentPreviewStatus(github, context) {
     description: result.description,
     target_url: result.targetUrl
   });
-  if (process.env.RESULT === 'deployed') {
-    await github.rest.repos.createCommitStatus({
-      owner, repo, sha,
-      state: 'pending',
-      context: LINK_CHECK_CONTEXT,
-      description: 'Waiting for the link check'
-    });
-  }
 
   const body = `${MARKER}\n${result.body}`;
   const comments = await github.paginate(github.rest.issues.listComments, {
@@ -79,5 +71,16 @@ module.exports = async function commentPreviewStatus(github, context) {
     await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
   } else {
     await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+  }
+
+  // Last, so nothing here can fail after it and leave the link check's
+  // status pending with no link check started
+  if (process.env.RESULT === 'deployed') {
+    await github.rest.repos.createCommitStatus({
+      owner, repo, sha,
+      state: 'pending',
+      context: LINK_CHECK_CONTEXT,
+      description: 'Waiting for the link check'
+    });
   }
 };

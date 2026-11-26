@@ -27,7 +27,8 @@ clone_preview_repo() {
 
   eval "$(ssh-agent -s)"
   # Don't leave the key loaded for the job's later steps
-  trap 'ssh-agent -k > /dev/null' EXIT
+  # (|| true: under set -e a failing trap would fail a successful run)
+  trap 'ssh-agent -k > /dev/null || true' EXIT
   printf '%s\n' "$PREVIEW_KEY" | ssh-add -
   mkdir -p ~/.ssh
   # GitHub's published host keys, over the API's HTTPS, rather than
