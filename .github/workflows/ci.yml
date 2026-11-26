@@ -11,22 +11,26 @@ permissions:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           persist-credentials: false
 
+      # Every script in the repository, wherever it is
       - name: shellcheck
-        run: shellcheck -S warning -P SCRIPTDIR -x pr-preview/scripts/*.sh tests/*.sh
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck -S warning -P SCRIPTDIR -x
 
       - name: JavaScript syntax
-        run: for f in pr-preview/scripts/*.js; do node --check "$f"; done
+        run: git ls-files -z '*.js' | xargs -0 -n1 node --check
 
       - name: Python syntax
-        run: python3 -m py_compile pr-preview/scripts/*.py
+        run: git ls-files -z '*.py' | xargs -0 python3 -m py_compile
 
   muffet:
     runs-on: ubuntu-latest
+    # muffet's --timeout is per request; a hung run shouldn't take hours
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:

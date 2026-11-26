@@ -16,7 +16,7 @@ Builds a preview site for every pull request to [wafer-space.github.io](https://
 
 ## Tests
 
-[CI](.github/workflows/ci.yml) runs shellcheck and syntax checks on the scripts, and [`tests/test-muffet.sh`](tests/test-muffet.sh), which runs muffet the way `verify` does on a small test site and checks it reports exactly the broken links in [`tests/expected-failures.txt`](tests/expected-failures.txt). Run that locally with muffet installed.
+[CI](.github/workflows/ci.yml) runs shellcheck and syntax checks on the scripts, and [`tests/test-muffet.sh`](tests/test-muffet.sh), which runs muffet the way `verify` does on a small test site and checks it reports exactly the broken links in [`tests/expected-failures.txt`](tests/expected-failures.txt), on every page it crawls, and that its report still lists the links that worked. Run that locally with muffet, python3 and curl installed. If a muffet release only rewords an error, update the expected file.
 
 ## License
 
