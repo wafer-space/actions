@@ -55,6 +55,20 @@ def main():
     run("git", "commit", "-am", f"CI: update muffet from {previous} to {version}")
     tree = run("git", "rev-parse", "HEAD^{tree}").stdout.strip()
 
+    title = f"CI: update muffet to {version}"
+    # By owner and branch: a fork's branch of the same name isn't ours
+    head = f"{owner}:{BRANCH}"
+    open_prs = gh_api(f"repos/{repo}/pulls?head={head}&state=open&per_page=10")
+    if not open_prs:
+        # Before pushing, so a declined update's branch isn't rewritten
+        # whenever the base branch moves
+        closed = gh_api(f"repos/{repo}/pulls?head={head}&state=closed&per_page=100")
+        declined = [pr["number"] for pr in closed or [] if pr["title"] == title and not pr["merged_at"]]
+        if declined:
+            print(f"::notice::muffet {version} was declined in #{declined[0]} (closed without merging); "
+                  "not opening it again")
+            return 0
+
     pushed = False
     remote = gh_api(f"repos/{repo}/branches/{BRANCH}")
     if remote is None:
@@ -62,7 +76,12 @@ def main():
     else:
         remote_sha = remote["commit"]["sha"]
         compare = gh_api(f"repos/{repo}/compare/{base}...{remote_sha}")
-        others = [c["sha"][:7] for c in compare["commits"] if (c.get("author") or {}).get("login") != bot_user]
+        # Author and committer: amending or rebasing the App's commit keeps
+        # it as the author, and only shows the person as committer. One
+        # that isn't linked to a GitHub user counts as someone else's
+        others = [c["sha"][:7] for c in compare["commits"]
+                  if (c.get("author") or {}).get("login") != bot_user
+                  or (c.get("committer") or {}).get("login") != bot_user]
         if others:
             print(f"::warning::{BRANCH} has commits by someone other than {bot_user} "
                   f"({', '.join(others)}), so it isn't updated to muffet {version}. "
@@ -78,7 +97,6 @@ def main():
     else:
         print(f"{BRANCH} already has this update")
 
-    title = f"CI: update muffet to {version}"
     body = (
         f"Updates the muffet link checker used by the `pr-preview/verify` action from {previous} to {version}.\n\n"
         f"Release notes: {release_url}\n\n"
@@ -87,9 +105,6 @@ def main():
         "Opened automatically by `.github/workflows/update-muffet.yml`. If this release shouldn't be used, "
         "close this pull request without merging: it won't be opened again for this version.\n"
     )
-    # By owner and branch: a fork's branch of the same name isn't ours
-    head = f"{owner}:{BRANCH}"
-    open_prs = gh_api(f"repos/{repo}/pulls?head={head}&state=open&per_page=10")
     if open_prs:
         number = open_prs[0]["number"]
         if pushed:
@@ -99,11 +114,6 @@ def main():
             print(f"Pull request #{number} is already up to date")
         return 0
 
-    closed = gh_api(f"repos/{repo}/pulls?head={head}&state=closed&per_page=100")
-    declined = [pr["number"] for pr in closed or [] if pr["title"] == title and not pr["merged_at"]]
-    if declined:
-        print(f"::notice::muffet {version} was declined in #{declined[0]} (closed without merging); not opening it again")
-        return 0
     run("gh", "pr", "create", "--repo", repo, "--base", base, "--head", BRANCH, "--title", title, "--body", body)
     return 0
 
