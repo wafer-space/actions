@@ -16,6 +16,15 @@ inputs:
   pr-number:
     description: "Only clean up this pull request's preview (default: every closed one)."
     default: ''
+  root-script:
+    description: >-
+      Executable to write the files at the root of the preview repository
+      that cover all of its previews, instead of the default index.html,
+      as a path in the job's checkout. It runs in the root of the preview
+      repository after previews are removed (and only then), with
+      PREVIEW_SOURCE_COMMIT set to the workflow's commit, and what it
+      writes goes into the commit straight after.
+    default: ''
   github-token:
     description: Token that can read pull requests.
     default: ${{ github.token }}
@@ -31,4 +40,5 @@ runs:
         PREVIEW_BASE_URL: ${{ inputs.preview-base-url }}
         PR_NUMBER: ${{ inputs.pr-number }}
         GH_TOKEN: ${{ inputs.github-token }}
+        ROOT_SCRIPT: ${{ inputs.root-script }}
       run: '"$GITHUB_ACTION_PATH/../scripts/cleanup-previews.sh"'

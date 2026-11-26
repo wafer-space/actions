@@ -3,10 +3,28 @@
 # repository and pushes changes to it.
 #
 # Needs PREVIEW_REPOSITORY, PREVIEW_BASE_URL and PREVIEW_KEY (a deploy key
-# that can push to PREVIEW_REPOSITORY).
+# that can push to PREVIEW_REPOSITORY). ROOT_SCRIPT, if set, is the
+# root-script input: see generate_root.
+
+# Makes ROOT_SCRIPT, a path in the caller's checkout, absolute, and fails
+# unless it is an executable file
+check_root_script() {
+  if [ -z "$ROOT_SCRIPT" ]; then
+    return 0
+  fi
+  if [[ "$ROOT_SCRIPT" != /* ]]; then
+    ROOT_SCRIPT="$GITHUB_WORKSPACE/$ROOT_SCRIPT"
+  fi
+  if [ ! -f "$ROOT_SCRIPT" ] || [ ! -x "$ROOT_SCRIPT" ]; then
+    echo "root-script $ROOT_SCRIPT isn't an executable file" >&2
+    return 1
+  fi
+}
 
 # Clones PREVIEW_REPOSITORY into ./preview-repo and changes into it
 clone_preview_repo() {
+  check_root_script || return 1
+
   eval "$(ssh-agent -s)"
   printf '%s\n' "$PREVIEW_KEY" | ssh-add -
   mkdir -p ~/.ssh
@@ -16,6 +34,21 @@ clone_preview_repo() {
   cd preview-repo || return 1
   git config user.name 'github-actions[bot]'
   git config user.email 'github-actions[bot]@users.noreply.github.com'
+}
+
+# generate_root SOURCE_COMMIT: writes the files at the root of the preview
+# repository that cover all of its previews, after a preview was added or
+# removed: ROOT_SCRIPT's if it is set, otherwise the default index.html.
+# ROOT_SCRIPT runs in the root of the preview repository with
+# PREVIEW_SOURCE_COMMIT set to SOURCE_COMMIT, the site commit being
+# deployed or cleaned up after. APPLY calls it last, so that what it writes
+# goes into the commit straight after.
+generate_root() {
+  if [ -n "$ROOT_SCRIPT" ]; then
+    PREVIEW_SOURCE_COMMIT="$1" "$ROOT_SCRIPT"
+  else
+    "$SCRIPT_DIR/generate-preview-index.sh"
+  fi
 }
 
 # push_preview_repo APPLY [CHECK]: on a fresh copy of main, runs APPLY,

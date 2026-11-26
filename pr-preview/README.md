@@ -29,6 +29,14 @@ Results are reported as commit statuses on the pull request's head commit as wel
 
 `deploy` checks that the pull request is still at the commit it built before each push, so a slow run for an older commit can't replace a newer preview. It waits until Pages serves the pages generated from that commit, then reports. Deploys and cleanups push to the same repository, so each retries from the new `main` if its push is rejected.
 
+## The preview repository's root
+
+After adding or removing previews, `deploy` and `cleanup` write the files at the root of the preview repository that cover all of them: by default an `index.html` listing the previews. A `root-script` input replaces that with the caller's own executable, run in the root of the preview repository with `PREVIEW_SOURCE_COMMIT` set to the site commit being deployed or cleaned up after. wafer.space's writes the index and the `redirects.json` its Cloudflare redirects Worker loads. It must come from the default branch's checkout, never the pull request's.
+
+Each attempt starts from the preview repository's current `main` and the script runs last, so what it writes goes into the commit straight after, and the history only ever grows. `cleanup` only runs it when it removed something, so a script that writes something new each time (such as a revision number) doesn't commit on every scheduled cleanup.
+
+`build` checks out the pull request with full history and tags (`fetch-depth`, default `0`), because wafer.space's redirect list records `git describe`.
+
 ## The theme
 
 `fetch-theme` fetches the commit the pull request's `_theme` submodule points at. GitHub serves every commit in a fork network from each of its repositories, so a pull request can point `_theme` at a commit in the author's own fork of the theme, and the website's key fetches it from the theme repository.

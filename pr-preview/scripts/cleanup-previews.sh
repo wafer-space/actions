@@ -38,7 +38,12 @@ remove_closed_previews() {
       removed+=("#$number")
     fi
   done
-  "$SCRIPT_DIR/generate-preview-index.sh"
+  # Only when something was removed: a root-script may write something new
+  # on every run (wafer.space's redirects.json records a revision), which
+  # would commit on every scheduled cleanup
+  if [ ${#removed[@]} -gt 0 ]; then
+    generate_root "$GITHUB_SHA"
+  fi
   COMMIT_MESSAGE="Remove previews of closed PRs: ${removed[*]}"
 }
 

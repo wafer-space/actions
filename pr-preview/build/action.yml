@@ -21,6 +21,13 @@ inputs:
     default: preview-site
   ruby-version:
     default: '3.1'
+  fetch-depth:
+    description: >-
+      actions/checkout's fetch-depth for the pull request. The default, 0,
+      fetches full history and tags, which wafer.space's build needs: its
+      redirect list records `git describe`, and production builds fail
+      without it.
+    default: '0'
 
 runs:
   using: composite
@@ -30,6 +37,7 @@ runs:
       with:
         ref: ${{ inputs.pr-sha }}
         path: pr
+        fetch-depth: ${{ inputs.fetch-depth }}
         submodules: false  # the theme comes from fetch-theme
         # Don't leave the token in .git/config, where the build could read it
         persist-credentials: false

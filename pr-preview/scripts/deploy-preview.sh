@@ -51,7 +51,7 @@ pr_is_still_at_commit() {
 add_preview() {
   rm -rf "$DIR_NAME"
   cp -r "$SITE_DIR" "$DIR_NAME"
-  "$SCRIPT_DIR/generate-preview-index.sh"
+  generate_root "$PR_SHA"
   COMMIT_MESSAGE="Deploy preview for PR #${PR_NUMBER} - ${PR_SHA}"
 }
 
