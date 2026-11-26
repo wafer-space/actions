@@ -187,12 +187,18 @@ else
   # under the page it's on
   BROKEN=$(grep -c $'^\t' muffet-report.txt || true)
   echo "- ❌ muffet found $BROKEN broken links or assets:" >> $REPORT_FILE
-  echo "\`\`\`" >> $REPORT_FILE
+  # The URLs come from the pull request's pages, so fence them with more
+  # backticks than any run of them in the list, or a URL containing ```
+  # could end the code block and add Markdown (e.g. @-mentions) to the
+  # comment
+  LONGEST=$(grep -oE '`+' muffet-report.txt | awk '{ if (length($0) > n) n = length($0) } END { print n + 0 }')
+  FENCE=$(printf '%*s' "$((LONGEST < 3 ? 3 : LONGEST + 1))" '' | tr ' ' '`')
+  echo "$FENCE" >> $REPORT_FILE
   head -60 muffet-report.txt >> $REPORT_FILE
   if [ "$(wc -l < muffet-report.txt)" -gt 60 ]; then
     echo "... (the full list is in the workflow run's log)" >> $REPORT_FILE
   fi
-  echo "\`\`\`" >> $REPORT_FILE
+  echo "$FENCE" >> $REPORT_FILE
   VERIFICATION_PASSED=false
 fi
 

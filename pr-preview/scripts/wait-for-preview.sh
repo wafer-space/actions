@@ -11,7 +11,9 @@ set -e
 MINUTES=${WAIT_MINUTES:-10}
 ATTEMPTS=$((MINUTES * 6))
 for ((i = 1; i <= ATTEMPTS; i++)); do
-  PAGE=$(curl -sf "$PREVIEW_URL" || true)
+  # A time limit, so one hung request can't stretch the wait, and a query
+  # string, so a cached copy of an older build isn't what's checked
+  PAGE=$(curl -sf --max-time 30 "${PREVIEW_URL}?commit-check=$i" || true)
   FOUND=$(grep -oE -m1 '<!-- Generated from git commit: [0-9a-f]{40}' <<< "$PAGE" | grep -oE '[0-9a-f]{40}' || true)
   if [ "$FOUND" = "$EXPECTED_COMMIT" ]; then
     echo "$PREVIEW_URL is serving $EXPECTED_COMMIT"

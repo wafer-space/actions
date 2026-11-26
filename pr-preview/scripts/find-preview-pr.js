@@ -30,8 +30,11 @@ module.exports = async function findPreviewPr(github, context, core) {
     head: `${run.head_repository.owner.login}:${run.head_branch}`,
     per_page: 100
   });
+  // Into the default branch only: the same head can be open against other
+  // branches too, and the preview is of what would merge into it
   const pr = prs.find(p =>
-    p.head.sha === run.head_sha && p.head.repo && p.head.repo.full_name === headRepo
+    p.head.sha === run.head_sha && p.head.repo && p.head.repo.full_name === headRepo &&
+    p.base.ref === context.payload.repository.default_branch
   );
   if (!pr) {
     // A newer push (which gets its own run) or a closed PR

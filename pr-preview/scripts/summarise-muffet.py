@@ -51,7 +51,13 @@ def https_hosts(results, own_host):
         for link in page.get("links", []):
             parsed = urllib.parse.urlsplit(link["url"])
             if parsed.scheme == "https" and parsed.hostname and parsed.hostname != own_host:
-                hosts.add((parsed.hostname, parsed.port or 443))
+                try:
+                    port = parsed.port or 443
+                except ValueError:
+                    # A malformed port (https://host:abc/) is muffet's to
+                    # report; it mustn't stop the rest of the summary
+                    continue
+                hosts.add((parsed.hostname, port))
     return sorted(hosts)
 
 

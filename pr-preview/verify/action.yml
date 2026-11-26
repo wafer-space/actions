@@ -66,6 +66,7 @@ runs:
       run: '"$GITHUB_ACTION_PATH/../scripts/run-verification.sh"'
 
     - name: Comment verification results on PR
+      id: comment
       if: ${{ !cancelled() && steps.pr-info.outputs.pr_number != '' }}
       uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
       env:
@@ -79,6 +80,21 @@ runs:
         script: |
           const commentVerificationResults = require(`${process.env.SCRIPTS}/comment-verification-results.js`);
           await commentVerificationResults(github, context, core);
+
+    # The deploy action set the link check's status to pending: if this run
+    # ended without reporting (it failed early, was cancelled or timed
+    # out), say so rather than leave it pending for good
+    - name: Set the link check's status if it wasn't reported
+      if: ${{ always() && steps.comment.outputs.status-set != 'true' }}
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
+      env:
+        SCRIPTS: ${{ github.action_path }}/../scripts
+        HEAD_SHA: ${{ steps.pr-info.outputs.head_sha || inputs.head-sha }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const failLinkCheckStatus = require(`${process.env.SCRIPTS}/fail-link-check-status.js`);
+          await failLinkCheckStatus(github, context, core);
 
     - name: Fail if verification failed
       if: steps.verification.outputs.verification_status != 'success'

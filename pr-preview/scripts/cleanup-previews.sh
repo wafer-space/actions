@@ -15,6 +15,7 @@ if [ -n "$PR_NUMBER" ] && ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
   echo "Invalid PR_NUMBER: $PR_NUMBER" >&2
   exit 1
 fi
+ERRORS="${RUNNER_TEMP:-/tmp}/cleanup-gh-errors"
 
 remove_closed_previews() {
   local numbers number state removed=()
@@ -25,13 +26,16 @@ remove_closed_previews() {
     if [ -n "$PR_NUMBER" ] && [ "$number" != "$PR_NUMBER" ]; then
       continue
     fi
-    if ! state=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq .state 2>&1); then
-      if [[ "$state" != *"HTTP 404"* ]]; then
-        echo "::warning::Couldn't check PR #$number, keeping its preview: $state"
+    # stderr apart from the state, so a notice gh prints alongside an
+    # answer can't make an open PR look closed
+    if ! state=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq .state 2> "$ERRORS"); then
+      if ! grep -q "HTTP 404" "$ERRORS"; then
+        echo "::warning::Couldn't check PR #$number, keeping its preview: $(cat "$ERRORS")"
         continue
       fi
       state=deleted
     fi
+    cat "$ERRORS" >&2
     if [ "$state" != open ]; then
       echo "PR #$number is $state, removing its preview"
       find . -maxdepth 1 -type d -regextype posix-extended -regex "./pr-$number(-.*)?" -exec rm -rf {} +

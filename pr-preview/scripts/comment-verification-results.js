@@ -13,6 +13,8 @@
 const MARKER = '<!-- VERIFICATION_COMMENT_MARKER -->';
 const ARCHIVED = '**📋 Previous verification results (archived)**';
 const STATUS_CONTEXT = 'PR preview / link check';
+// The account GITHUB_TOKEN comments as
+const BOT_LOGIN = 'github-actions[bot]';
 
 module.exports = async function commentVerificationResults(github, context, core) {
   const { owner, repo } = context.repo;
@@ -31,12 +33,25 @@ ${process.env.REPORT_CONTENT}
 ${MARKER}`
   });
 
+  // Before archiving, so a failure there can't leave the status pending
+  await github.rest.repos.createCommitStatus({
+    owner, repo,
+    sha: process.env.HEAD_SHA,
+    state: passed ? 'success' : 'failure',
+    context: STATUS_CONTEXT,
+    description: passed ? 'All checks passed' : 'Some checks failed',
+    target_url: `${newComment.html_url}`
+  });
+  // So the verify action doesn't overwrite it if archiving fails
+  core.setOutput('status-set', 'true');
+
   const comments = await github.paginate(github.rest.issues.listComments, {
     owner, repo, issue_number: prNumber, per_page: 100
   });
+  // Ours only: another app's comment quoting the marker can't be edited
   const older = comments.filter(c =>
     c.id < newComment.id &&
-    c.user.type === 'Bot' &&
+    c.user.login === BOT_LOGIN &&
     c.body.includes(MARKER) &&
     !c.body.includes(ARCHIVED)
   );
@@ -57,13 +72,4 @@ ${MARKER}`
     });
   }
   core.info(`Posted comment ${newComment.id}, archived ${older.length} older ones`);
-
-  await github.rest.repos.createCommitStatus({
-    owner, repo,
-    sha: process.env.HEAD_SHA,
-    state: passed ? 'success' : 'failure',
-    context: STATUS_CONTEXT,
-    description: passed ? 'All checks passed' : 'Some checks failed',
-    target_url: `${newComment.html_url}`
-  });
 };

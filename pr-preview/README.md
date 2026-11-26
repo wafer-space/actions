@@ -59,7 +59,7 @@ Previews are served from one domain, so a pull request's HTML and JavaScript sha
 
 ## Copies of the website
 
-A copy of the website in someone's own account (a fork of wafer-space.github.io) runs these workflows too. There they use the owner's own fork of the theme and deploy to the owner's own copy of the preview repository, and only if configured: the website's workflows describe how. A copy of the preview repository mustn't keep the original's `CNAME`, so `deploy` and `cleanup` remove a `CNAME` that doesn't match the preview base URL's host.
+A copy of the website in someone's own account (a fork of wafer-space.github.io) runs these workflows too. There they use the owner's own fork of the theme and deploy to the owner's own copy of the preview repository, and only if configured: the website's workflows describe how. A copy of the preview repository mustn't keep the original's `CNAME`, so `deploy` and `cleanup` remove a `CNAME` that doesn't match the preview base URL's host. Previews are pushed to the preview repository's `main` branch, which Pages must serve.
 
 ## Changing these actions
 

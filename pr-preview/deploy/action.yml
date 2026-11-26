@@ -96,7 +96,7 @@ runs:
         PR_NUMBER: ${{ inputs.pr-number }}
         PREVIEW_URL: ${{ inputs.preview-url }}
         HEAD_SHA: ${{ inputs.pr-sha }}
-        RESULT: ${{ inputs.build-result != 'success' && 'build-failed' || (steps.wait.outputs.deployed == 'true' && 'deployed' || 'not-served') }}
+        RESULT: ${{ inputs.build-result != 'success' && 'build-failed' || (steps.push.outcome == 'failure' && 'push-failed' || (steps.wait.outputs.deployed == 'true' && 'deployed' || 'not-served')) }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |

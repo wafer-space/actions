@@ -36,12 +36,19 @@ if [ -n "$(find "$SITE_DIR" -type l)" ]; then
   find "$SITE_DIR" -type l >&2
   exit 1
 fi
-# A .git directory would be committed as an embedded repository
+# A .git directory would be committed as an embedded repository, and the
+# other git files would change how the preview repository treats its files
 find "$SITE_DIR" -name .git -prune -exec rm -rf {} +
+find "$SITE_DIR" \( -name .gitattributes -o -name .gitmodules -o -name .gitignore \) -type f -delete
 
 pr_is_still_at_commit() {
   local head
-  head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq 'if .state == "open" then .head.sha else "closed" end')
+  # Called as a condition, so set -e doesn't apply: a failed lookup must
+  # fail the deploy, not look like the PR moved on (which reports nothing)
+  if ! head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq 'if .state == "open" then .head.sha else "closed" end'); then
+    echo "::error::Couldn't read PR #$PR_NUMBER to check it's still at $PR_SHA"
+    exit 1
+  fi
   if [ "$head" != "$PR_SHA" ]; then
     echo "PR #$PR_NUMBER is now at $head, not $PR_SHA; not deploying"
     return 1

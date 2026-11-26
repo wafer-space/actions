@@ -26,11 +26,18 @@ clone_preview_repo() {
   check_root_script || return 1
 
   eval "$(ssh-agent -s)"
+  # Don't leave the key loaded for the job's later steps
+  trap 'ssh-agent -k > /dev/null' EXIT
   printf '%s\n' "$PREVIEW_KEY" | ssh-add -
   mkdir -p ~/.ssh
-  ssh-keyscan github.com >> ~/.ssh/known_hosts
+  # GitHub's published host keys, over the API's HTTPS, rather than
+  # trusting whatever ssh-keyscan is first answered with
+  gh api meta --jq '.ssh_keys[] | "github.com " + .' >> ~/.ssh/known_hosts
 
-  git clone -q "git@github.com:${PREVIEW_REPOSITORY}.git" preview-repo
+  # Without blobs from history: git describe (wafer.space's root-script)
+  # needs every commit, but not every old file. Never --depth, which would
+  # break that count
+  git clone -q --filter=blob:none "git@github.com:${PREVIEW_REPOSITORY}.git" preview-repo
   cd preview-repo || return 1
   git config user.name 'github-actions[bot]'
   git config user.email 'github-actions[bot]@users.noreply.github.com'

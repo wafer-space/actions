@@ -4,13 +4,15 @@
  * shows in the pull request's checks. Once deployed, it also sets the
  * link check's status to pending until the verify action reports.
  *
- * Needs PR_NUMBER, PREVIEW_URL, HEAD_SHA and RESULT: deployed, not-served
- * or build-failed.
+ * Needs PR_NUMBER, PREVIEW_URL, HEAD_SHA and RESULT: deployed, not-served,
+ * push-failed or build-failed.
  */
 
 const MARKER = '<!-- PR_PREVIEW_COMMENT -->';
 const STATUS_CONTEXT = 'PR preview';
 const LINK_CHECK_CONTEXT = 'PR preview / link check';
+// The account GITHUB_TOKEN comments as
+const BOT_LOGIN = 'github-actions[bot]';
 
 module.exports = async function commentPreviewStatus(github, context) {
   const { owner, repo } = context.repo;
@@ -38,6 +40,12 @@ module.exports = async function commentPreviewStatus(github, context) {
       description: "Preview build failed",
       targetUrl: runUrl,
       body: `## ❌ Preview build failed\n\nCommit \`${commit}\` didn't build. See the [workflow run](${runUrl}).`
+    },
+    'push-failed': {
+      state: 'failure',
+      description: "Preview couldn't be pushed",
+      targetUrl: runUrl,
+      body: `## ❌ Preview deployment failed\n\nCommit \`${commit}\` built, but couldn't be pushed to the preview site. See the [workflow run](${runUrl}).`
     }
   };
   const result = results[process.env.RESULT];
@@ -65,7 +73,8 @@ module.exports = async function commentPreviewStatus(github, context) {
   const comments = await github.paginate(github.rest.issues.listComments, {
     owner, repo, issue_number: prNumber, per_page: 100
   });
-  const existing = comments.find(c => c.user.type === 'Bot' && c.body.includes(MARKER));
+  // Ours only: another app's comment quoting the marker can't be edited
+  const existing = comments.find(c => c.user.login === BOT_LOGIN && c.body.includes(MARKER));
   if (existing) {
     await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
   } else {
