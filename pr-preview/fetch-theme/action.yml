@@ -1,0 +1,49 @@
+name: PR preview / fetch theme
+description: >-
+  Stage 2 (workflow_run). Checks out the private theme at the commit
+  find-pr found and uploads it as an artifact for the build action, so the
+  build needs no secrets. Runs no code from the pull request.
+
+inputs:
+  theme-repository:
+    description: The theme repository, e.g. wafer-space/wafer-space-jekyll-theme.
+    required: true
+  theme-sha:
+    description: Theme commit to check out (find-pr's theme-sha).
+    required: true
+  ssh-key:
+    description: Deploy key that can read theme-repository.
+    required: true
+  artifact-name:
+    description: Name of the artifact to upload.
+    default: preview-theme
+
+runs:
+  using: composite
+  steps:
+    - name: Check theme commit
+      shell: bash
+      env:
+        THEME_SHA: ${{ inputs.theme-sha }}
+      run: |
+        if ! [[ "$THEME_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "Invalid theme commit: $THEME_SHA" >&2
+          exit 1
+        fi
+
+    - name: Checkout theme
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      with:
+        repository: ${{ inputs.theme-repository }}
+        ref: ${{ inputs.theme-sha }}
+        ssh-key: ${{ inputs.ssh-key }}
+        path: _preview_theme
+        persist-credentials: false
+
+    - name: Upload theme
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: _preview_theme
+        if-no-files-found: error
+        retention-days: 1
